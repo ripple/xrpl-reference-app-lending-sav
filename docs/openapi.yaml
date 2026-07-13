@@ -1,0 +1,747 @@
+openapi: 3.1.0
+info:
+  title: XLS-66 Lending Protocol Reference App
+  description: |
+    HTTP API for the XRPL Lending Protocol (XLS-66) + Single Asset Vault
+    (XLS-65) reference implementation. Every route that mutates on-chain
+    state maps 1:1 to an XRPL transaction and re-queries the ledger before
+    returning.
+
+    ## Conventions
+
+    - **Auth** — handled by Auth0 Universal Login. Clients obtain a session
+      by visiting `/auth/login` (browser only) — there is no programmatic
+      login endpoint. The session is stored in an httpOnly cookie `xls66-auth`.
+      Every `/api/*` route is gated by `src/middleware.ts` and returns
+      `401 Unauthorized` without a valid cookie.
+    - **Amounts** — drops (integer string) for XRP; decimal string for IOU
+      and MPT. See the README for the scaling conventions.
+    - **Rates** — UI-facing rates are % or basis points; on-ledger they are
+      1/10 bps. The API accepts the UI form and scales at the boundary.
+    - **Content type** — `application/json` for all request/response bodies.
+  version: 1.0.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: XLS-66 reference app
+
+servers:
+  - url: http://localhost:3000
+    description: Local dev server
+
+tags:
+  - name: Session
+    description: Authentication, wallet lifecycle, peer transfers, balances.
+  - name: Vault
+    description: XLS-65 Single Asset Vault operations (create, deposit, withdraw, delete, history).
+  - name: Broker
+    description: XLS-66 LoanBroker configuration and first-loss cover.
+  - name: Loan
+    description: XLS-66 Loan origination, repayment, management, and deletion.
+
+security:
+  - sessionCookie: []
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: xls66-auth
+      description: httpOnly cookie set by `POST /api/session`. Value is the Session document's MongoDB ObjectId.
+
+  parameters:
+    LoanIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, description: "Hash256 of the Loan or LoanBroker ledger entry" }
+    VaultIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, description: "Hash256 of the Vault ledger entry" }
+
+  schemas:
+    Role:
+      type: string
+      enum: [broker, depositor, borrower, issuer]
+
+    IssuedToken:
+      description: Discriminator for vault asset when non-XRP. Stored on the session after `setupIOU` / `setupMPT`.
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [IOU, MPT]
+        currency:
+          type: string
+          description: "IOU currency code (e.g. USD)"
+        issuer:
+          type: string
+          description: "IOU issuer classic address"
+        mptIssuanceId:
+          type: string
+          description: "MPT UINT192 hex (48 chars)"
+
+    WalletInfo:
+      type: object
+      required: [address, publicKey, privateKey, seed, role]
+      properties:
+        address: { type: string }
+        publicKey: { type: string }
+        privateKey: { type: string }
+        seed: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        balance:
+          type: string
+          description: "Drops string. Refreshed by `/api/session/balances`."
+
+    Session:
+      type: object
+      required: [_id, email, wallets]
+      properties:
+        _id: { type: string, description: "MongoDB ObjectId" }
+        email: { type: string, format: email }
+        wallets:
+          type: array
+          items: { $ref: "#/components/schemas/WalletInfo" }
+        vaultId: { type: string, nullable: true }
+        loanBrokerId: { type: string, nullable: true }
+        issuedToken: { $ref: "#/components/schemas/IssuedToken" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    VaultAsset:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [XRP, IOU, MPT]
+        currency: { type: string }
+        issuer: { type: string }
+        mptIssuanceId: { type: string }
+
+    ShareMetadata:
+      description: XLS-89 compressed MPT metadata for the vault-share token.
+      type: object
+      properties:
+        ticker: { type: string, maxLength: 6 }
+        name: { type: string, maxLength: 64 }
+        description: { type: string, maxLength: 256 }
+        icon: { type: string, maxLength: 128 }
+        issuerName: { type: string, maxLength: 64 }
+
+    VaultCreateOptions:
+      type: object
+      properties:
+        asset: { $ref: "#/components/schemas/VaultAsset" }
+        name: { type: string, maxLength: 64 }
+        website: { type: string, maxLength: 128 }
+        assetsMaximum:
+          type: string
+          description: "Deposit cap. Drops for XRP; asset units for IOU/MPT."
+        nonTransferableShares:
+          type: boolean
+          description: "Sets tfVaultShareNonTransferable flag."
+        shareMetadata: { $ref: "#/components/schemas/ShareMetadata" }
+
+    Vault:
+      description: MongoDB cache row for a vault. Combined with `onLedger` for a full view.
+      type: object
+      required: [_id, sessionId, vaultId, ownerAddress]
+      properties:
+        _id: { type: string }
+        sessionId: { type: string }
+        vaultId: { type: string }
+        ownerAddress: { type: string }
+        asset:
+          type: object
+          properties:
+            currency: { type: string }
+            issuer: { type: string }
+            mptIssuanceId: { type: string }
+        totalDeposited: { type: string }
+        sharesMinted: { type: string }
+        status: { type: string, enum: [active, deleted] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        onLedger:
+          description: Live `vault_info` response, amount fields unscaled for MPT.
+          type: object
+          additionalProperties: true
+
+    Loan:
+      description: MongoDB cache row for a loan. Cached terms + latest synced state.
+      type: object
+      required: [_id, sessionId, loanId, loanBrokerId, borrowerAddress]
+      properties:
+        _id: { type: string }
+        sessionId: { type: string }
+        loanId: { type: string }
+        loanBrokerId: { type: string }
+        borrowerAddress: { type: string }
+        principalRequested: { type: string }
+        interestRate: { type: integer, description: "Stored as basis points." }
+        paymentTotal: { type: integer }
+        paymentInterval: { type: integer, description: "Seconds" }
+        gracePeriod: { type: integer, description: "Seconds" }
+        originationFee: { type: string }
+        serviceFee: { type: string }
+        paymentsRemaining: { type: integer }
+        principalOutstanding: { type: string }
+        status: { type: string, enum: [active, repaid, defaulted, closed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BrokerOptions:
+      description: All rates in 1/10 bps. Range 0-10_000 for ManagementFeeRate, 0-100_000 for cover rates.
+      type: object
+      properties:
+        managementFeeRate: { type: integer, minimum: 0, maximum: 10000 }
+        debtMaximum: { type: integer, minimum: 0 }
+        coverRateMinimum: { type: integer, minimum: 0, maximum: 100000 }
+        coverRateLiquidation: { type: integer, minimum: 0, maximum: 100000 }
+
+    TxResult:
+      description: Pass-through of the rippled `tx` submission result. Only the hash is canonical; everything else is for debugging.
+      type: object
+      additionalProperties: true
+      properties:
+        hash: { type: string }
+        ledger_index: { type: integer }
+        meta:
+          type: object
+          additionalProperties: true
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid `xls66-auth` cookie.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Referenced entity not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Validation error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ServerError:
+      description: Unhandled error or rippled failure.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+paths:
+  /api/session/me:
+    get:
+      tags: [Session]
+      summary: Session probe
+      description: Returns the session for the current auth cookie without hitting the ledger. Heals stale `issuedToken` state (unsets it when no vault is active).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/session/balances:
+    get:
+      tags: [Session]
+      summary: Live per-role balances
+      description: |
+        Queries the ledger for XRP balance (all roles), IOU balance if an IOU
+        was issued, and MPT balance if an MPT was issued. Updates the session
+        cache with fresh XRP balances.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role: { $ref: "#/components/schemas/Role" }
+                        balance: { type: string, description: "Drops" }
+                        tokenBalance: { type: string, description: "IOU/MPT balance, already unscaled for MPT" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/session/topup:
+    post:
+      tags: [Session]
+      summary: Re-fund all role wallets from the faucet
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  wallets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role: { $ref: "#/components/schemas/Role" }
+                        balance: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/session/transfer:
+    post:
+      tags: [Session]
+      summary: Peer transfer between role wallets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to, amount]
+              properties:
+                from: { $ref: "#/components/schemas/Role" }
+                to: { $ref: "#/components/schemas/Role" }
+                amount: { type: string, description: "Human decimal. Amounts for XRP are interpreted as XRP (not drops)." }
+                asset:
+                  type: string
+                  enum: [XRP, TUSD]
+                  default: XRP
+      responses:
+        "200":
+          description: Payment submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/vault:
+    post:
+      tags: [Vault]
+      summary: Create a vault (VaultCreate)
+      description: |
+        Submits a `VaultCreate` transaction. If `vaultOptions.asset.type` is
+        `IOU` or `MPT`, the server first runs `setupIOU` / `setupMPT` — this
+        creates trustlines / MPT issuance, authorizes the three role wallets,
+        and distributes demo stake to all of them. The resulting asset is
+        persisted on the session as `issuedToken`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vaultOptions: { $ref: "#/components/schemas/VaultCreateOptions" }
+      responses:
+        "201":
+          description: Vault created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vault: { $ref: "#/components/schemas/Vault" }
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+    get:
+      tags: [Vault]
+      summary: List active vaults
+      description: Returns every active vault for the session, enriched with live `vault_info`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vaults:
+                    type: array
+                    items: { $ref: "#/components/schemas/Vault" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/vault/{id}:
+    get:
+      tags: [Vault]
+      summary: Vault detail
+      parameters:
+        - $ref: "#/components/parameters/VaultIdPath"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vault: { $ref: "#/components/schemas/Vault" }
+                  onLedger:
+                    description: "`vault_info` response with amount fields unscaled for MPT."
+                    type: object
+                    additionalProperties: true
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/vault/deposit:
+    post:
+      tags: [Vault]
+      summary: VaultDeposit
+      description: Supply liquidity. Provide `amountDrops` for XRP vaults, `tokenAmount` (decimal) for IOU/MPT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vaultId]
+              properties:
+                vaultId: { type: string }
+                amountDrops: { type: string, description: "XRP drops (integer string)" }
+                tokenAmount: { type: string, description: "IOU/MPT decimal" }
+      responses:
+        "200":
+          description: Deposit submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/vault/withdraw:
+    post:
+      tags: [Vault]
+      summary: VaultWithdraw
+      description: Redeem shares for underlying asset. Payload mirrors `/api/vault/deposit`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vaultId]
+              properties:
+                vaultId: { type: string }
+                amountDrops: { type: string }
+                tokenAmount: { type: string }
+      responses:
+        "200":
+          description: Withdraw submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/vault/delete:
+    post:
+      tags: [Vault]
+      summary: Full teardown (loans → broker → vault)
+      description: |
+        Defaults every active loan, deletes them, withdraws first-loss
+        cover, deletes the broker, then deletes the vault. Any step that
+        fails individually is logged but doesn't block later steps — the
+        final `VaultDelete` surfaces the real error if state is still dirty.
+      responses:
+        "200":
+          description: Vault deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400":
+          description: "Vault not empty (assets still deposited)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/vault/history:
+    get:
+      tags: [Vault]
+      summary: Deposit / withdraw audit log + PNL summary
+      parameters:
+        - name: vaultId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id: { type: string }
+                        type: { type: string, enum: [deposit, withdraw] }
+                        amountDrops: { type: string, description: "Unscaled for MPT on read." }
+                        txHash: { type: string }
+                        createdAt: { type: string, format: date-time }
+                  summary:
+                    type: object
+                    properties:
+                      totalDeposited: { type: string }
+                      totalWithdrawn: { type: string }
+                      netInvested: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/broker:
+    post:
+      tags: [Broker]
+      summary: Register broker (LoanBrokerSet + optional cover deposit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vaultId]
+              properties:
+                vaultId: { type: string }
+                brokerOptions: { $ref: "#/components/schemas/BrokerOptions" }
+                coverAmountDrops:
+                  type: string
+                  description: First-loss cover to deposit immediately. Drops for XRP, decimal for IOU/MPT.
+      responses:
+        "200":
+          description: Broker registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loanBrokerId: { type: string }
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      tags: [Broker]
+      summary: Delete broker (LoanBrokerDelete)
+      description: Caller must have previously withdrawn any remaining cover.
+      responses:
+        "200":
+          description: Broker deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/loan:
+    post:
+      tags: [Loan]
+      summary: Issue loan (LoanSet, multi-signed)
+      description: |
+        Broker signs first, borrower counter-signs via
+        `xrpl.signLoanSetByCounterparty`. Amount fields (`principalRequested`,
+        `originationFee`, `serviceFee`, `latePaymentFee`, `closePaymentFee`)
+        are human values (drops for XRP, decimal for IOU/MPT); the server
+        scales MPT values by `AssetScale` before building the tx.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                principalRequested: { type: string }
+                interestRate: { type: integer, description: "Basis points (server × 10 for 1/10 bps on-chain)." }
+                paymentTotal: { type: integer, minimum: 1, maximum: 120 }
+                paymentInterval: { type: integer, description: "Seconds between payments (min 60)." }
+                gracePeriod: { type: integer, description: "Seconds" }
+                originationFee: { type: string }
+                serviceFee: { type: string }
+                latePaymentFee: { type: string }
+                closePaymentFee: { type: string }
+                overpaymentFee: { type: integer, description: "1/10 bps" }
+                lateInterestRate: { type: integer, description: "1/10 bps" }
+                closeInterestRate: { type: integer, description: "1/10 bps" }
+                overpaymentInterestRate: { type: integer, description: "1/10 bps" }
+                loanName: { type: string, maxLength: 64 }
+                allowOverpayment:
+                  type: boolean
+                  description: "Sets tfLoanOverpayment on LoanSet (enables later overpayment)."
+      responses:
+        "201":
+          description: Loan created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loanId: { type: string }
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500":
+          description: Loan submission failed (e.g. `tecPRECISION_LOSS`, `tecLIMIT_EXCEEDED`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Loan]
+      summary: List loans
+      description: Returns all session loans with on-chain sync. Updates DB `paymentsRemaining` / `principalOutstanding` / `status` from `ledger_entry`; unscales MPT amounts.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loans:
+                    type: array
+                    items: { $ref: "#/components/schemas/Loan" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/loan/{id}:
+    get:
+      tags: [Loan]
+      summary: Loan or LoanBroker detail
+      description: |
+        The same route serves both `Loan` and `LoanBroker` entries — pass the
+        ledger-entry id regardless of type. Amount fields are unscaled for
+        MPT vaults.
+      parameters:
+        - $ref: "#/components/parameters/LoanIdPath"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loan: { $ref: "#/components/schemas/Loan" }
+                  onLedger:
+                    type: object
+                    additionalProperties: true
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/loan/repay:
+    post:
+      tags: [Loan]
+      summary: Make a payment (LoanPay)
+      description: |
+        Mode mapping:
+
+        | `mode`         | xrpl.js flag           | Amount source                       |
+        | -------------- | ---------------------- | ----------------------------------- |
+        | `"full"`       | `tfLoanFullPayment`    | Server-computed, XLS-66 §A-3.2.4    |
+        | `"late"`       | `tfLoanLatePayment`    | Server-computed, XLS-66 §A-3.2.2    |
+        | `"overpayment"`| `tfLoanOverpayment`    | `amountDrops`                       |
+        | `"regular"` / omitted | —               | `amountDrops` (ledger caps)         |
+
+        `amountDrops` is required for `overpayment`/`regular`/`custom` paths.
+        It is ignored for `full` and `late` — the server re-derives the
+        exact amount from the latest validated ledger close time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loanId]
+              properties:
+                loanId: { type: string }
+                amountDrops:
+                  type: string
+                  description: "Drops for XRP, decimal for IOU/MPT. Omit for full/late."
+                mode:
+                  type: string
+                  enum: [full, late, overpayment, regular]
+      responses:
+        "200":
+          description: Payment submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+                  amount:
+                    type: string
+                    description: The amount the server actually submitted. Useful for full/late to show the real debit.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/loan/default:
+    post:
+      tags: [Loan]
+      summary: Default or close a loan
+      description: |
+        With `action: "default"` (or omitted) the server submits `LoanManage`
+        with the `tfLoanDefault` flag. With `action: "close"` it submits
+        `LoanDelete` (only valid on fully repaid or defaulted loans).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loanId]
+              properties:
+                loanId: { type: string }
+                action:
+                  type: string
+                  enum: [default, close]
+                  default: default
+      responses:
+        "200":
+          description: Loan defaulted or deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { $ref: "#/components/schemas/TxResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }

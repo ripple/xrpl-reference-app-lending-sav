@@ -22,6 +22,14 @@ test and educational purposes only** — **not for Mainnet** or any
 deployment that handles real value. Forking and adapting it is encouraged;
 running it unmodified against live funds is not.
 
+## Prerequisites
+
+Set these up **before** the Quick Start:
+
+- **Node.js 20+** and npm.
+- **An Auth0 tenant** (free tier is fine) — a Regular Web Application for Universal Login. See [Auth0 Setup](#auth0-setup).
+- **A MongoDB database** — a free Atlas cluster or a local Docker instance. See [MongoDB Setup](#mongodb-setup).
+
 ## Quick Start
 
 ```bash
@@ -75,6 +83,28 @@ tenant and a Regular Web Application.
 6. Copy the application Domain, Client ID, and Client Secret into
    `.env.local` (see `.env.example`).
 7. Generate `AUTH0_SECRET` with `openssl rand -hex 32` and add it to `.env.local`.
+
+### MongoDB Setup
+
+The app stores session data (wallet records, vault / loan mappings) off-chain in
+MongoDB. Use either a free cloud cluster or a local instance.
+
+**Option A — MongoDB Atlas (free tier):**
+
+1. Sign up at https://www.mongodb.com/cloud/atlas and create a free **M0** cluster.
+2. **Database Access** → add a database user (username + password).
+3. **Network Access** → allow your IP (or `0.0.0.0/0` for quick local testing).
+4. **Connect → Drivers** → copy the connection string and add a database name, e.g.
+   `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/xls66-lending?retryWrites=true&w=majority`
+5. Put it in `.env.local` as `MONGODB_URI`.
+
+**Option B — local Docker:**
+
+```bash
+docker run -d --name xls66-mongo -p 27017:27017 mongo
+```
+
+Then set `MONGODB_URI=mongodb://localhost:27017/xls66-lending` in `.env.local`.
 
 ## Tech stack
 

@@ -1,4 +1,4 @@
-# XLS-66 Lending Protocol & XLS-65 SAV — DAP
+# XLS-66 Lending Protocol & XLS-65 SAV — reference app
 
 A full-stack reference implementation of the XRP Ledger's lending amendments:
 [**XLS-66** (Lending Protocol)](https://github.com/XRPLF/XRPL-Standards/tree/master/XLS-0066-lending-protocol)

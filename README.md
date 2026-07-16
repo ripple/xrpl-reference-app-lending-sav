@@ -109,7 +109,7 @@ Then set `MONGODB_URI=mongodb://localhost:27017/xls66-lending` in `.env.local`.
 ## Tech stack
 
 - **Framework** – Next.js 16 (App Router, React 19, TypeScript, Turbopack)
-- **Auth middleware** – `src/middleware.ts` (cookie gate + same-origin CSRF check)
+- **Auth middleware** – `src/proxy.ts` (cookie gate + same-origin CSRF check)
 - **UI** – Tailwind CSS v4, shadcn/ui, Aceternity UI, Magic UI, Motion
 - **XRPL** – xrpl.js v4 (includes XLS-65/66/33 validators and flag enums)
 - **Database** – MongoDB (Mongoose) — see "On-chain vs off-chain" below
@@ -266,14 +266,14 @@ the same file is served from:
 - `GET /api/openapi` — raw YAML (or JSON with `Accept: application/json`)
 - `GET /api/docs` — Swagger UI rendering of the spec
 
-All routes are protected by `src/middleware.ts` — the Auth0 SDK session
+All routes are protected by `src/proxy.ts` — the Auth0 SDK session
 cookie is required. The caller's identity (`auth0Sub`) is resolved from the
 cookie by the SDK, never from the request body or query, so cross-session
 IDOR is impossible. Public exceptions (exact-match): `GET /auth/login`,
 `GET /auth/callback`, `GET /auth/logout`, `GET /api/openapi`,
 `GET /api/docs`, `POST /api/csp-report`. Mutating requests are additionally
 gated by a same-origin `Origin`-header check. Every response carries a strict
-nonce-based **Content-Security-Policy** (`src/middleware.ts`), and the
+nonce-based **Content-Security-Policy** (`src/proxy.ts`), and the
 transaction and wallet-provisioning endpoints are **rate-limited**
 (`src/lib/rate-limit.ts`).
 
@@ -335,7 +335,7 @@ src/
 │       ├── vault/      (route, [id], deposit, withdraw, delete, history)
 │       ├── broker/     (route)
 │       └── loan/       (route, [id], repay, default)
-├── middleware.ts                  # Auth0 SDK middleware + same-origin CSRF check
+├── proxy.ts                  # Auth0 SDK middleware + same-origin CSRF check
 ├── components/                   # Domain + UI primitives (ui/*)
 ├── hooks/use-session.ts          # Client session context (federated logout via /auth/logout)
 ├── lib/
@@ -399,9 +399,9 @@ src/
   persisted on `UserWallets.auth0Sub`.
 - **Session routing**: the Auth0 SDK reads identity from an encrypted
   httpOnly cookie it manages — never from a request body or query.
-  `src/middleware.ts` gates every protected route via `auth0.getSession()`.
+  `src/proxy.ts` gates every protected route via `auth0.getSession()`.
 - **CSRF**: mutating requests must carry an `Origin` matching the request
-  host (enforced in `src/middleware.ts`). Server-side tools without `Origin`
+  host (enforced in `src/proxy.ts`). Server-side tools without `Origin`
   pass through, but they need a valid auth cookie anyway.
 - **Per-row authorization**: `/api/loan/[id]` and `/api/vault/[id]` scope
   their DB lookup by the caller's `UserWallets._id` so authenticated callers

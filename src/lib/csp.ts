@@ -1,6 +1,6 @@
 /**
  * Content-Security-Policy builder. A fresh nonce is minted per request in
- * `src/middleware.ts` and threaded into `script-src` so Next.js can tag every
+ * `src/proxy.ts` and threaded into `script-src` so Next.js can tag every
  * inline bootstrap/RSC script with it — `'strict-dynamic'` then lets those
  * trusted scripts load the rest of the bundle while blocking any injected
  * (XSS) script that lacks the nonce.

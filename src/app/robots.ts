@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 /**
  * robots.txt served at /robots.txt. Disallows the `/api/*` surface
- * (everything behind `src/middleware.ts` auth) and the `/dashboard/*` routes;
+ * (everything behind `src/proxy.ts` auth) and the `/dashboard/*` routes;
  * the landing page and the public OpenAPI docs stay indexable.
  */
 export default function robots(): MetadataRoute.Robots {

@@ -15,7 +15,7 @@ const PUBLIC_API_PATHS = new Set([
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Per-request CSP nonce. Forwarded to the render via the `x-nonce` and
   // `Content-Security-Policy` request headers (Next.js reads the latter to
   // tag every inline script it emits) and echoed on the response for the

@@ -139,8 +139,8 @@ export function WithdrawForm({
           <Input
             id="withdraw-amount"
             type="number"
-            min="0.01"
-            step={isToken ? "0.01" : "0.1"}
+            min={isToken ? "0.01" : "0.000001"}
+            step="any"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required

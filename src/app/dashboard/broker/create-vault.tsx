@@ -181,19 +181,6 @@ export function CreateVault({
     }
   }
 
-  function InfoTip({ text }: { text: string }) {
-    return (
-      <Tooltip>
-        <TooltipTrigger className="cursor-help">
-          <Info className="h-3.5 w-3.5 text-muted-foreground" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs text-xs font-normal">
-          {text}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
@@ -702,6 +689,19 @@ export function CreateVault({
   );
 }
 
+function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger className="cursor-help">
+        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs font-normal">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 const DURATION_UNITS: DurationUnit[] = ["minutes", "hours", "days"];
 
 function DurationField({
@@ -729,14 +729,7 @@ function DurationField({
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
         <Label htmlFor={id}>{label}</Label>
-        <Tooltip>
-          <TooltipTrigger className="cursor-help">
-            <Info className="h-3.5 w-3.5 text-muted-foreground" />
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs text-xs font-normal">
-            {tip}
-          </TooltipContent>
-        </Tooltip>
+        <InfoTip text={tip} />
       </div>
       <div className="flex gap-2">
         <Input

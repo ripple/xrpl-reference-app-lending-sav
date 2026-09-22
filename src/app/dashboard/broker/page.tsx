@@ -10,7 +10,8 @@ import { ManageLoans } from "./manage-loans";
 import { TransactionStatus } from "@/components/transaction-status";
 import { StepIndicator } from "@/components/step-indicator";
 import { motion, AnimatePresence } from "motion/react";
-import { Info } from "lucide-react";
+import { Info, Lock } from "lucide-react";
+import { ClosedEndedBadge } from "@/components/vault-phase-banner";
 import type { LoanState } from "@/types/loan";
 import type { VaultSchedule } from "@/lib/vault-phase";
 
@@ -36,11 +37,33 @@ function SingleVaultNotice() {
           (repaid or defaulted) <strong className="text-foreground">and depositors have withdrawn</strong>{" "}
           their funds.
         </p>
-        <p>
-          Vaults are closed-ended: withdrawals are locked during the investment
-          period, so a funded vault can only be deleted during subscription or
-          after redemption. Use <strong className="text-foreground">Reset session</strong>{" "}
-          in the header to start over sooner.
+      </div>
+    </div>
+  );
+}
+
+function ClosedEndedNotice() {
+  return (
+    <div className="flex gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
+      <Lock className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+      <div className="space-y-1.5 leading-relaxed">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium text-foreground">Vaults are closed-ended</p>
+          <ClosedEndedBadge />
+        </div>
+        <p className="text-muted-foreground">
+          Since <strong className="text-foreground">LendingProtocolV1_1</strong> a loan
+          broker can only be attached to a closed-ended vault: deposits happen during
+          the <strong className="text-foreground">subscription</strong> window, loans
+          during the <strong className="text-foreground">investment</strong> period,
+          and withdrawals once <strong className="text-foreground">redemption</strong>{" "}
+          opens.
+        </p>
+        <p className="text-muted-foreground">
+          Withdrawals are locked during investment, so a funded vault can only be
+          deleted during subscription or after redemption. Use{" "}
+          <strong className="text-foreground">Reset session</strong> in the header to
+          start over sooner.
         </p>
       </div>
     </div>
@@ -165,6 +188,7 @@ export default function BrokerPage() {
           className="space-y-6"
         >
           <SingleVaultNotice />
+          <ClosedEndedNotice />
 
           <CreateVault
             onCreated={async (id, brokerId, txHash) => {
@@ -184,6 +208,7 @@ export default function BrokerPage() {
       ) : (
         <div className="space-y-8">
           <SingleVaultNotice />
+          <ClosedEndedNotice />
 
           <motion.div
             initial={{ opacity: 0 }}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useRippleNow } from "@/hooks/use-ripple-now";
 import { LOAN_REDEMPTION_BUFFER_SECONDS } from "@/lib/constants";
 import {
@@ -11,6 +12,15 @@ import {
   VAULT_PHASE_LABEL,
   type VaultSchedule,
 } from "@/lib/vault-phase";
+
+/** Pill marking UI that exists because of LendingProtocolV1_1 closed-ended vaults. */
+export function ClosedEndedBadge({ className }: { className?: string }) {
+  return (
+    <Badge variant="outline" className={`border-primary/40 text-primary ${className ?? ""}`}>
+      Lending V1.1 · Closed-ended vaults
+    </Badge>
+  );
+}
 
 /**
  * Explains where a closed-ended vault is in its lifecycle and what that
@@ -42,9 +52,10 @@ export function VaultPhaseBanner({ vault }: { vault: VaultSchedule | null | unde
     <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
       <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
       <div className="space-y-0.5">
-        <p className="font-medium">
-          Closed-ended vault · {VAULT_PHASE_LABEL[phase]} phase
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium">{VAULT_PHASE_LABEL[phase]} phase</p>
+          <ClosedEndedBadge />
+        </div>
         <p className="text-xs text-muted-foreground leading-relaxed">{detail}</p>
       </div>
     </div>

@@ -34,6 +34,7 @@ import {
   formatDuration,
   type DurationUnit,
 } from "@/lib/vault-phase";
+import { ClosedEndedBadge } from "@/components/vault-phase-banner";
 import {
   MPT_ASSET_CLASSES,
   MPT_ASSET_SUBCLASSES,
@@ -336,7 +337,10 @@ export function CreateVault({
           {/* Lifecycle */}
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium">Lifecycle</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium">Lifecycle</p>
+                <ClosedEndedBadge />
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Closed-ended vault (required for lending). Depositors fund the
                 vault during the subscription window, loans are issued during

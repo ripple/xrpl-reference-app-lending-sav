@@ -90,7 +90,7 @@ export function FirstLossCapital({
             id="cover-amount"
             type="number"
             min="0"
-            step="0.1"
+            step="any"
             placeholder={`e.g. 10`}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}

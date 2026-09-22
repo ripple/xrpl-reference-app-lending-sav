@@ -575,8 +575,8 @@ export function RepaymentForm({
                   <Input
                     id="overpay-extra"
                     type="number"
-                    min="0.1"
-                    step="0.1"
+                    min="0.000001"
+                    step="any"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     required
@@ -652,8 +652,8 @@ export function RepaymentForm({
               <Input
                 id="custom-amount"
                 type="number"
-                min="0.1"
-                step="0.1"
+                min="0.000001"
+                step="any"
                 value={customAmount}
                 onChange={(e) => setCustomAmount(e.target.value)}
                 required

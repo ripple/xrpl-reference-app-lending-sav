@@ -300,8 +300,8 @@ export function CreateVault({
                   <Input
                     id="max-cap"
                     type="number"
-                    min="1"
-                    step="1"
+                    min="0.000001"
+                    step="any"
                     value={maxCapXrp}
                     onChange={(e) => setMaxCapXrp(e.target.value)}
                   />
@@ -560,7 +560,7 @@ export function CreateVault({
                   id="debt-max"
                   type="number"
                   min="0"
-                  step="1"
+                  step="any"
                   placeholder="Unlimited"
                   value={debtMaximum}
                   onChange={(e) => setDebtMaximum(e.target.value)}

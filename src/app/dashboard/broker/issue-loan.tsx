@@ -263,8 +263,8 @@ export function IssueLoan({
                 <Input
                   id="principal"
                   type="number"
-                  min="1"
-                  step="1"
+                  min="0.000001"
+                  step="any"
                   value={principalXrp}
                   onChange={(e) => setPrincipalXrp(e.target.value)}
                   required
@@ -364,7 +364,7 @@ export function IssueLoan({
                   id="orig-fee"
                   type="number"
                   min="0"
-                  step="0.1"
+                  step="any"
                   value={originationFee}
                   onChange={(e) => setOriginationFee(e.target.value)}
                 />
@@ -378,7 +378,7 @@ export function IssueLoan({
                   id="svc-fee"
                   type="number"
                   min="0"
-                  step="0.1"
+                  step="any"
                   value={serviceFee}
                   onChange={(e) => setServiceFee(e.target.value)}
                 />
@@ -413,7 +413,7 @@ export function IssueLoan({
                     id="late-fee"
                     type="number"
                     min="0"
-                    step="0.1"
+                    step="any"
                     placeholder="0"
                     value={latePaymentFee}
                     onChange={(e) => setLatePaymentFee(e.target.value)}
@@ -428,7 +428,7 @@ export function IssueLoan({
                     id="close-fee"
                     type="number"
                     min="0"
-                    step="0.1"
+                    step="any"
                     placeholder="0"
                     value={closePaymentFee}
                     onChange={(e) => setClosePaymentFee(e.target.value)}

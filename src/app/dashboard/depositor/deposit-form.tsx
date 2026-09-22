@@ -69,8 +69,8 @@ export function DepositForm({
         <Input
           id="deposit-amount"
           type="number"
-          min={isToken ? "0.01" : "1"}
-          step={isToken ? "0.01" : "1"}
+          min="0.000001"
+          step="any"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           required

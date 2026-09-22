@@ -333,8 +333,8 @@ export function SessionHeader() {
                       <div className="flex gap-2">
                         <Input
                           type="number"
-                          min="0.01"
-                          step="0.01"
+                          min="0.000001"
+                          step="any"
                           value={transferAmount}
                           onChange={(e) => setTransferAmount(e.target.value)}
                           className="h-8 text-xs"

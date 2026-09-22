@@ -10,6 +10,10 @@ Built as an open-source template for fintechs, asset managers, and devs who want
 - Full loan lifecycle: origination (multi-sign), regular / late / early-full /
   overpayment repayment modes, default, and cleanup.
 - Three asset types supported: **XRP**, **IOU**, **MPT** (XLS-33).
+- **Closed-ended vaults** (LendingProtocolV1_1): every vault is created with a
+  fixed Subscription → Investment → Redemption schedule, the only vault kind a
+  loan broker can attach to since that amendment. Dashboards gate deposits,
+  loans and withdrawals by phase and cap loan terms to the redemption date.
 - On-chain correctness verified against the latest XLS-66 / XLS-65 / XLS-33
   master specs; every non-obvious calculation has a spec-section reference in
   the code.
@@ -111,7 +115,8 @@ Then set `MONGODB_URI=mongodb://localhost:27017/xls66-lending` in `.env.local`.
 - **Framework** – Next.js 16 (App Router, React 19, TypeScript, Turbopack)
 - **Auth middleware** – `src/proxy.ts` (cookie gate + same-origin CSRF check)
 - **UI** – Tailwind CSS v4, shadcn/ui, Aceternity UI, Magic UI, Motion
-- **XRPL** – xrpl.js v4 (includes XLS-65/66/33 validators and flag enums)
+- **XRPL** – xrpl.js v5.2+ (XLS-65/66/33 models, closed-ended vault fields, and
+  the `fixCleanup3_4_0` counterparty signing prefix required by rippled 3.4)
 - **Database** – MongoDB (Mongoose) — see "On-chain vs off-chain" below
 
 ## Architecture: on-chain vs off-chain
@@ -123,7 +128,7 @@ to bridge HTTP requests between transactions.
 
 | Object / Tx                           | Path                                                    |
 | ------------------------------------- | ------------------------------------------------------- |
-| `Vault` (XLS-65)                      | `VaultCreate` / `VaultDeposit` / `VaultWithdraw` / `VaultDelete` |
+| `Vault` (XLS-65, closed-ended)        | `VaultCreate` (`VaultKind: 1` + dates) / `VaultDeposit` / `VaultWithdraw` / `VaultDelete` |
 | `LoanBroker` (XLS-66)                 | `LoanBrokerSet` / `LoanBrokerCoverDeposit` / `LoanBrokerCoverWithdraw` / `LoanBrokerDelete` |
 | `Loan` (XLS-66)                       | `LoanSet` (multi-sign) / `LoanPay` / `LoanManage` / `LoanDelete` |
 | `MPTokenIssuance` + `MPToken` (XLS-33) | `MPTokenIssuanceCreate` / `MPTokenAuthorize`            |
@@ -252,10 +257,40 @@ step surfaces as `tecHAS_OBLIGATIONS`.
 
 ```
 Sign in / Sign up (Auth0 Universal Login) → Email verified → 4 wallets created + faucet-funded
- ├── Broker    → Create vault → Register broker (+ first-loss cover) → Issue loan → Manage / default
- ├── Depositor → Deposit → Track PNL → Withdraw
+ ├── Broker    → Create closed-ended vault → Register broker (+ first-loss cover) → Issue loan → Manage / default
+ ├── Depositor → Deposit (subscription phase) → Track PNL → Withdraw (redemption phase)
  └── Borrower  → View loan → Make payment (installment / late / full / overpayment / custom)
 ```
+
+## Closed-ended vault lifecycle (LendingProtocolV1_1)
+
+Since `LendingProtocolV1_1` a `LoanBrokerSet` that creates a broker on an
+open-ended vault fails with `tecNO_PERMISSION`, so `/api/vault` always creates
+a **closed-ended** vault (`VaultKind: 1`). Two immutable dates, chosen on the
+create form and anchored to the validated ledger close time, split its life:
+
+| Phase          | Window                              | `VaultDeposit` | `VaultWithdraw` | `LoanSet` |
+| -------------- | ----------------------------------- | -------------- | --------------- | --------- |
+| Subscription   | creation → `SubscriptionDate`       | ✅              | ✅               | ❌ `tecTOO_SOON` |
+| Investment     | `SubscriptionDate` → `RedemptionDate` | ❌ `tecEXPIRED` | ❌ `tecTOO_SOON` | ✅         |
+| Redemption     | from `RedemptionDate`               | ❌ `tecEXPIRED` | ✅               | ❌ `tecEXPIRED` |
+
+A loan's last scheduled payment (`PaymentTotal × PaymentInterval` from now)
+must land at least 60 s before `RedemptionDate`, otherwise `LoanSet` returns
+`tecNO_PERMISSION`. `LoanPay`, `LoanManage`, `LoanDelete` and the broker cover
+transactions are allowed in every phase.
+
+The app enforces the same rules before submitting (friendly `400`s from the
+deposit / withdraw / loan routes, disabled controls and countdowns in the
+dashboards) via `src/lib/vault-phase.ts`.
+
+Demo defaults are tuned so the whole lifecycle fits in one sitting: a
+5-minute subscription window, a 30-minute investment period, and loans of
+3 × 5-minute installments with a 2-minute grace period (so late payment and
+default can be demonstrated too). All of them are editable on the forms.
+Because withdrawals are locked during investment, a funded vault can only be
+deleted during subscription or after redemption; **Reset session** abandons it
+and provisions fresh wallets.
 
 ## API surface
 
@@ -293,7 +328,7 @@ transaction and wallet-provisioning endpoints are **rate-limited**
 
 | Method   | Route                   | Description                                      |
 | -------- | ----------------------- | ------------------------------------------------ |
-| `POST`   | `/api/vault`            | `VaultCreate` (+ IOU/MPT bootstrap if needed)    |
+| `POST`   | `/api/vault`            | `VaultCreate` closed-ended (+ IOU/MPT bootstrap if needed) |
 | `GET`    | `/api/vault`            | List active vaults with live `vault_info`        |
 | `GET`    | `/api/vault/[id]`       | Single vault detail (unscaled for MPT)           |
 | `POST`   | `/api/vault/deposit`    | `VaultDeposit`                                   |

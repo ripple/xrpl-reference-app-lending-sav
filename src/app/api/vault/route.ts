@@ -12,8 +12,21 @@ import {
   fetchVaultSnapshot,
   unscaleVaultNodeForMPT,
   humanToMptUnits,
+  getValidatedCloseTime,
 } from "@/lib/xrpl/helpers";
-import { validateDrops, validateAmount, sanitizeString } from "@/lib/validation";
+import {
+  validateDrops,
+  validateAmount,
+  validateNumber,
+  sanitizeString,
+} from "@/lib/validation";
+import {
+  DEFAULT_INVESTMENT_SECONDS,
+  DEFAULT_SUBSCRIPTION_SECONDS,
+  MAX_VAULT_TERM_SECONDS,
+  MIN_INVESTMENT_SECONDS,
+  MIN_SUBSCRIPTION_SECONDS,
+} from "@/lib/constants";
 import { getUserWallets } from "@/lib/user-wallets";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import {
@@ -37,6 +50,37 @@ export async function POST(request: NextRequest) {
     if (raw.name) vaultOptions.name = sanitizeString(raw.name, 64);
     if (raw.website) vaultOptions.website = sanitizeString(raw.website, 128);
     if (raw.nonTransferableShares) vaultOptions.nonTransferableShares = true;
+
+    // Closed-ended lifecycle (LendingProtocolV1_1): LoanBrokerSet is rejected
+    // with tecNO_PERMISSION on an open-ended vault, so every vault is created
+    // closed-ended. Validate the durations here, before the IOU/MPT bootstrap
+    // submits anything, so bad input has no on-ledger side effects.
+    const subscriptionSeconds = validateNumber(
+      raw.subscriptionSeconds ?? DEFAULT_SUBSCRIPTION_SECONDS,
+      MIN_SUBSCRIPTION_SECONDS,
+      MAX_VAULT_TERM_SECONDS - 1
+    );
+    if (subscriptionSeconds === null || !Number.isInteger(subscriptionSeconds)) {
+      return NextResponse.json(
+        {
+          error: `subscriptionSeconds must be an integer between ${MIN_SUBSCRIPTION_SECONDS} and ${MAX_VAULT_TERM_SECONDS - 1}`,
+        },
+        { status: 400 }
+      );
+    }
+    const investmentSeconds = validateNumber(
+      raw.investmentSeconds ?? DEFAULT_INVESTMENT_SECONDS,
+      MIN_INVESTMENT_SECONDS,
+      MAX_VAULT_TERM_SECONDS - 1
+    );
+    if (investmentSeconds === null || !Number.isInteger(investmentSeconds)) {
+      return NextResponse.json(
+        {
+          error: `investmentSeconds must be an integer between ${MIN_INVESTMENT_SECONDS} and ${MAX_VAULT_TERM_SECONDS - 1}`,
+        },
+        { status: 400 }
+      );
+    }
 
     const brokerWallet = getRoleWallet(session, "broker");
 
@@ -145,6 +189,14 @@ export async function POST(request: NextRequest) {
     if (rawSm.description) sm.description = sanitizeString(rawSm.description, 256);
     if (rawSm.icon) sm.icon = sanitizeString(rawSm.icon, 128);
     vaultOptions.shareMetadata = sm;
+
+    // Anchor the closed-ended schedule to the validated ledger close time (not
+    // the server clock, so skew can't yield tecEXPIRED). Computed last, after
+    // any IOU/MPT bootstrap, so the window isn't eaten by those txs.
+    const subscriptionDate = (await getValidatedCloseTime()) + subscriptionSeconds;
+    const redemptionDate = subscriptionDate + investmentSeconds;
+    vaultOptions.subscriptionDate = subscriptionDate;
+    vaultOptions.redemptionDate = redemptionDate;
 
     const tx = buildVaultCreate(brokerWallet.classicAddress, vaultOptions);
     const result = await submitTransaction(brokerWallet, tx);

@@ -15,6 +15,9 @@ export interface CreateVaultInputs {
   vaultName: string;
   website: string;
   nonTransferable: boolean;
+  /** Closed-ended lifecycle: fundraising window, then lockup, in seconds. */
+  subscriptionSeconds: number;
+  investmentSeconds: number;
   hasMaxCap: boolean;
   maxCap: string;
   shareMetadata: {
@@ -49,6 +52,8 @@ export async function createVaultAndBroker(input: CreateVaultInputs): Promise<Cr
   if (input.vaultName.trim()) vaultOptions.name = input.vaultName.trim();
   if (input.website.trim()) vaultOptions.website = input.website.trim();
   if (input.nonTransferable) vaultOptions.nonTransferableShares = true;
+  vaultOptions.subscriptionSeconds = input.subscriptionSeconds;
+  vaultOptions.investmentSeconds = input.investmentSeconds;
   if (input.hasMaxCap && input.maxCap) {
     vaultOptions.assetsMaximum =
       input.assetType === "XRP"

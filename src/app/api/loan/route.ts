@@ -11,7 +11,9 @@ import {
   isLedgerEntryNotFound,
   humanToMptUnits,
   sanitizeLedgerError,
+  fetchVaultPhase,
 } from "@/lib/xrpl/helpers";
+import { loanIssuanceBlocker } from "@/lib/vault-phase";
 import {
   DEFAULT_INTEREST_RATE_BPS,
   DEFAULT_PAYMENT_TOTAL,
@@ -110,6 +112,17 @@ export async function POST(request: NextRequest) {
     if (body.loanName && typeof body.loanName === "string") {
       const name = body.loanName.trim().slice(0, 64).replace(/[\x00-\x1F\x7F]/g, "");
       if (name) loanData = Buffer.from(JSON.stringify({ n: name })).toString("hex").toUpperCase();
+    }
+
+    // Closed-ended vault gating (LendingProtocolV1_1). The ledger would answer
+    // tecTOO_SOON / tecEXPIRED / tecNO_PERMISSION; return the shared
+    // explanation the Issue Loan form shows, judged on the ledger clock.
+    if (session.vaultId) {
+      const phaseInfo = await fetchVaultPhase(session.vaultId);
+      const blocker =
+        phaseInfo &&
+        loanIssuanceBlocker(phaseInfo.vault, phaseInfo.closeTime, paymentTotal * paymentInterval);
+      if (blocker) return NextResponse.json({ error: blocker }, { status: 400 });
     }
 
     const loanSetTx = buildLoanSet({

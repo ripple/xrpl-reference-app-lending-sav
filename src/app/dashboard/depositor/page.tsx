@@ -26,6 +26,9 @@ import {
 import { explorerVaultUrl } from "@/lib/explorer";
 import { DROPS_PER_XRP } from "@/lib/constants";
 import { MPTokenIssuanceCreateFlags } from "xrpl";
+import { VaultPhaseBanner } from "@/components/vault-phase-banner";
+import { useRippleNow } from "@/hooks/use-ripple-now";
+import { getVaultPhase, isClosedEnded } from "@/lib/vault-phase";
 
 interface VaultOnChain {
   vault?: {
@@ -44,6 +47,9 @@ interface VaultOnChain {
     Flags: number;
     WithdrawalPolicy?: number;
     Asset?: Record<string, string>;
+    VaultKind?: number;
+    SubscriptionDate?: number;
+    RedemptionDate?: number;
   };
 }
 
@@ -56,6 +62,7 @@ export default function DepositorPage() {
   } | null>(null);
   const [vaultData, setVaultData] = useState<VaultOnChain | null>(null);
   const [loadingVault, setLoadingVault] = useState(false);
+  const now = useRippleNow();
 
   const vaultId = session?.vaultId;
 
@@ -105,6 +112,7 @@ export default function DepositorPage() {
   }
 
   const vault = vaultData?.vault;
+  const phase = getVaultPhase(vault, now);
 
   // Detect asset type from on-chain data or session
   const vaultAsset = vault?.Asset;
@@ -255,6 +263,9 @@ export default function DepositorPage() {
                 Type: <span className="font-medium text-foreground">{vault?.Flags === 0 ? "Public" : "Private"}</span>
               </span>
               <span>
+                Kind: <span className="font-medium text-foreground">{isClosedEnded(vault) ? "Closed-ended" : "Open-ended"}</span>
+              </span>
+              <span>
                 Shares:{" "}
                 <span className="font-medium text-foreground">
                   {(vault?.shares?.Flags ?? 0) & MPTokenIssuanceCreateFlags.tfMPTCanTransfer
@@ -275,6 +286,8 @@ export default function DepositorPage() {
         </Card>
       </motion.div>
 
+      <VaultPhaseBanner vault={vault} />
+
       {/* Deposit / Withdraw */}
       <div className="grid gap-8 lg:grid-cols-2">
         <motion.div
@@ -293,6 +306,7 @@ export default function DepositorPage() {
               <DepositForm
                 vaultId={vaultId}
                 issuedToken={session.issuedToken}
+                phase={vault ? phase : undefined}
                 onSuccess={(msg, txHash) => {
                   setStatus({ type: "success", message: msg, txHash });
                   fetchVault();
@@ -322,6 +336,8 @@ export default function DepositorPage() {
               <WithdrawForm
                 vaultId={vaultId}
                 issuedToken={session.issuedToken}
+                phase={vault ? phase : undefined}
+                redemptionDate={isClosedEnded(vault) ? vault.RedemptionDate : undefined}
                 vaultAssetsTotal={vault?.AssetsTotal}
                 vaultAssetsAvailable={vault?.AssetsAvailable}
                 onSuccess={(msg, txHash) => {

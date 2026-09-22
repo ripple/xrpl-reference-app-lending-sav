@@ -9,8 +9,10 @@ import {
   buildAmountField,
   hasIssuedToken,
   fetchVaultSnapshot,
+  fetchVaultPhase,
   humanToMptUnits,
 } from "@/lib/xrpl/helpers";
+import { canWithdraw, rippleToDate } from "@/lib/vault-phase";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +26,19 @@ export async function POST(request: NextRequest) {
     const vaultId = typeof body.vaultId === "string" ? body.vaultId.trim() : null;
     if (!vaultId) {
       return NextResponse.json({ error: "vaultId is required" }, { status: 400 });
+    }
+
+    // Closed-ended vault: funds are locked during investment (ledger answers
+    // tecTOO_SOON); explain and point at the redemption date.
+    const phaseInfo = await fetchVaultPhase(vaultId);
+    if (phaseInfo && !canWithdraw(phaseInfo.phase)) {
+      const from = phaseInfo.vault.RedemptionDate
+        ? ` Redemption opens ${rippleToDate(phaseInfo.vault.RedemptionDate).toISOString()}.`
+        : "";
+      return NextResponse.json(
+        { error: `Withdrawals are locked during the vault's investment phase.${from}` },
+        { status: 400 }
+      );
     }
 
     const depositorWallet = getRoleWallet(session, "depositor");

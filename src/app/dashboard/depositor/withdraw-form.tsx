@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { DROPS_PER_XRP } from "@/lib/constants";
+import { canWithdraw, rippleToDate, type VaultPhase } from "@/lib/vault-phase";
 import type { IssuedToken } from "@/types/session";
 
 interface WithdrawFormProps {
@@ -13,6 +14,10 @@ interface WithdrawFormProps {
   issuedToken?: IssuedToken;
   vaultAssetsTotal?: string;
   vaultAssetsAvailable?: string;
+  /** Current lifecycle phase; withdrawals are locked during investment. */
+  phase?: VaultPhase;
+  /** Ripple-epoch seconds when redemption opens (closed-ended vaults). */
+  redemptionDate?: number;
   onSuccess: (message: string, txHash?: string) => void;
   onError: (message: string) => void;
   onPending: (message: string) => void;
@@ -23,6 +28,8 @@ export function WithdrawForm({
   issuedToken,
   vaultAssetsTotal,
   vaultAssetsAvailable,
+  phase,
+  redemptionDate,
   onSuccess,
   onError,
   onPending,
@@ -31,6 +38,7 @@ export function WithdrawForm({
   const unit = isToken ? "TUSD" : "XRP";
   const [amount, setAmount] = useState(isToken ? "100" : "10");
   const [loading, setLoading] = useState(false);
+  const locked = phase !== undefined && !canWithdraw(phase);
 
   /** Convert a ledger amount (drops for XRP, token units for IOU/MPT) to a human "X.XX" string. */
   function toDisplay(ledgerValue: string): string {
@@ -138,12 +146,22 @@ export function WithdrawForm({
             required
           />
         </div>
-        <Button type="submit" variant="outline" className="w-full" disabled={loading || !hasAssets}>
+        {locked && (
+          <p className="text-xs text-muted-foreground">
+            Funds are locked during the investment period.
+            {redemptionDate
+              ? ` Redemption opens ${rippleToDate(redemptionDate).toLocaleString()}.`
+              : ""}
+          </p>
+        )}
+        <Button type="submit" variant="outline" className="w-full" disabled={loading || !hasAssets || locked}>
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Withdrawing...
             </>
+          ) : locked ? (
+            "Withdrawals locked"
           ) : !hasAssets ? (
             "No assets to withdraw"
           ) : (
@@ -152,7 +170,7 @@ export function WithdrawForm({
         </Button>
       </form>
 
-      {availableDisplay && Number(availableDisplay) > 0 && (
+      {availableDisplay && Number(availableDisplay) > 0 && !locked && (
         <Button
           variant="secondary"
           className="w-full"

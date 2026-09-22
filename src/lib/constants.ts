@@ -89,13 +89,47 @@ export const MPT_SCALE_MULTIPLIER = 10 ** MPT_ASSET_SCALE;
 
 // XLS-66 loan defaults. Principal values are expressed in drops for XRP and
 // human units for IOU/MPT.
+// Demo timing: short enough that the whole lifecycle (deposit → loan →
+// repayment / late payment / default → redemption) fits in one sitting, and
+// the default 3 × 5-minute loan ends well before the 30-minute investment
+// period closes (see DEFAULT_INVESTMENT_SECONDS below).
 export const DEFAULT_INTEREST_RATE_BPS = 500; // 5%
 export const DEFAULT_PAYMENT_TOTAL = 3;
-export const DEFAULT_PAYMENT_INTERVAL = 30 * SECONDS_PER_DAY;
-export const DEFAULT_GRACE_PERIOD = 7 * SECONDS_PER_DAY;
+export const DEFAULT_PAYMENT_INTERVAL = 5 * 60;
+export const DEFAULT_GRACE_PERIOD = 2 * 60;
 export const DEFAULT_ORIGINATION_FEE_DROPS = "1000000";
 export const DEFAULT_SERVICE_FEE_DROPS = "500000";
 export const DEFAULT_ORIGINATION_FEE_TOKEN = "1";
 export const DEFAULT_SERVICE_FEE_TOKEN = "0.5";
 export const DEFAULT_PRINCIPAL_DROPS = "20000000";
 export const DEFAULT_PRINCIPAL_TOKEN = "20";
+
+// XLS-65 closed-ended vault lifecycle (LendingProtocolV1_1). Since that
+// amendment a LoanBroker can only be attached to a closed-ended vault
+// (LoanBrokerSet returns tecNO_PERMISSION otherwise), so every vault this app
+// creates is closed-ended. Its life is split into three phases by two dates
+// fixed at creation: Subscription (deposit/withdraw, no loans) →
+// Investment (loans, no deposit/withdraw) → Redemption (withdraw, no loans).
+export const VAULT_KIND_CLOSED_ENDED = 1;
+/** Ledger floor for RedemptionDate − SubscriptionDate. */
+export const MIN_INVESTMENT_SECONDS = 180;
+/** Ledger ceiling (exclusive) for RedemptionDate − SubscriptionDate: 30 years. */
+export const MAX_VAULT_TERM_SECONDS = 946_708_560;
+/**
+ * App floor for the subscription window. Creating the vault, the broker and
+ * the optional cover already burns ~15–30 s of it (three validated txs after
+ * an anchor that is itself one close in the past), and the depositor still
+ * has to switch tabs and submit.
+ */
+export const MIN_SUBSCRIPTION_SECONDS = 120;
+/** A loan's last scheduled payment must land this long before RedemptionDate. */
+export const LOAN_REDEMPTION_BUFFER_SECONDS = 60;
+/** Allowance for the ledger closes between "now" and the LoanSet landing. */
+export const LOAN_TERM_DRIFT_MARGIN_SECONDS = 15;
+/**
+ * Demo defaults: 5 minutes to deposit, then a 30-minute lockup in which the
+ * default 15-minute loan is issued and repaid, then redemption. Long enough to
+ * explore each role, short enough to reach redemption within a session.
+ */
+export const DEFAULT_SUBSCRIPTION_SECONDS = 5 * 60;
+export const DEFAULT_INVESTMENT_SECONDS = 30 * 60;

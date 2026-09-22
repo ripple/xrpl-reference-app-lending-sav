@@ -21,7 +21,19 @@ import {
 } from "@/components/ui/tooltip";
 import { motion } from "motion/react";
 import { createVaultAndBroker } from "./actions";
-import { DROPS_PER_XRP } from "@/lib/constants";
+import {
+  DEFAULT_SUBSCRIPTION_SECONDS,
+  DROPS_PER_XRP,
+  LOAN_REDEMPTION_BUFFER_SECONDS,
+  MAX_VAULT_TERM_SECONDS,
+  MIN_INVESTMENT_SECONDS,
+  MIN_SUBSCRIPTION_SECONDS,
+} from "@/lib/constants";
+import {
+  durationToSeconds,
+  formatDuration,
+  type DurationUnit,
+} from "@/lib/vault-phase";
 import {
   MPT_ASSET_CLASSES,
   MPT_ASSET_SUBCLASSES,
@@ -68,6 +80,27 @@ export function CreateVault({
 
   // Non-transferable shares
   const [nonTransferable, setNonTransferable] = useState(false);
+
+  // Closed-ended lifecycle (LendingProtocolV1_1). The ledger only lets a loan
+  // broker attach to a closed-ended vault, so the schedule is mandatory:
+  // Subscription (deposits) → Investment (loans) → Redemption (withdrawals).
+  // Demo defaults: 5 minutes to deposit, then a 30-minute lockup that fits
+  // the default 3 × 5-minute loan and reaches redemption within a session.
+  const [subscriptionValue, setSubscriptionValue] = useState("5");
+  const [subscriptionUnit, setSubscriptionUnit] = useState<DurationUnit>("minutes");
+  const [investmentValue, setInvestmentValue] = useState("30");
+  const [investmentUnit, setInvestmentUnit] = useState<DurationUnit>("minutes");
+  const subscriptionSeconds = durationToSeconds(subscriptionValue, subscriptionUnit);
+  const investmentSeconds = durationToSeconds(investmentValue, investmentUnit);
+  const subscriptionValid =
+    subscriptionSeconds >= MIN_SUBSCRIPTION_SECONDS && subscriptionSeconds < MAX_VAULT_TERM_SECONDS;
+  // Vault + broker + cover take ~15–30 s to validate, and the depositor still
+  // has to switch tabs: a window under the default leaves little slack.
+  const subscriptionTight =
+    subscriptionValid && subscriptionSeconds < DEFAULT_SUBSCRIPTION_SECONDS;
+  const investmentValid =
+    investmentSeconds >= MIN_INVESTMENT_SECONDS && investmentSeconds < MAX_VAULT_TERM_SECONDS;
+  const lifecycleValid = subscriptionValid && investmentValid;
 
   // Broker config
   const [managementFee, setManagementFee] = useState("");
@@ -120,6 +153,8 @@ export function CreateVault({
         vaultName,
         website,
         nonTransferable,
+        subscriptionSeconds,
+        investmentSeconds,
         hasMaxCap,
         maxCap: maxCapXrp,
         shareMetadata: {
@@ -169,8 +204,8 @@ export function CreateVault({
         <CardHeader className="space-y-2">
           <CardTitle className="text-xl">Create a Vault</CardTitle>
           <CardDescription>
-            Configure and deploy a public vault on the ledger. A loan broker
-            will be registered automatically.
+            Configure and deploy a closed-ended vault on the ledger. A loan
+            broker will be registered automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -293,6 +328,56 @@ export function CreateVault({
                   Vault shares cannot be transferred between accounts.
                 </p>
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Lifecycle */}
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Lifecycle</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Closed-ended vault (required for lending). Depositors fund the
+                vault during the subscription window, loans are issued during
+                the investment period, and shares are redeemed afterwards.
+                Both dates are fixed on-chain at creation.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <DurationField
+                id="subscription-window"
+                label="Subscription window"
+                tip="How long depositors can deposit and withdraw before the vault locks. No loans can be issued during this window, so keep it short for a demo."
+                value={subscriptionValue}
+                unit={subscriptionUnit}
+                onValue={setSubscriptionValue}
+                onUnit={setSubscriptionUnit}
+                error={
+                  subscriptionValid
+                    ? undefined
+                    : `Between ${MIN_SUBSCRIPTION_SECONDS} seconds and 30 years.`
+                }
+                hint={
+                  subscriptionTight
+                    ? "Tight: creating the vault and broker takes up to ~30 s, and the depositor must deposit before this window closes."
+                    : undefined
+                }
+              />
+              <DurationField
+                id="investment-period"
+                label="Investment period"
+                tip={`Lockup during which loans are issued and repaid. Deposits and withdrawals are blocked; every loan must fully repay at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before the period ends.`}
+                value={investmentValue}
+                unit={investmentUnit}
+                onValue={setInvestmentValue}
+                onUnit={setInvestmentUnit}
+                error={
+                  investmentValid
+                    ? undefined
+                    : `Between ${MIN_INVESTMENT_SECONDS} seconds and 30 years.`
+                }
+              />
             </div>
           </div>
 
@@ -551,7 +636,15 @@ export function CreateVault({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type</span>
-              <span className="font-medium">Public</span>
+              <span className="font-medium">Public · Closed-ended</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subscription window</span>
+              <span className="font-medium">{formatDuration(subscriptionSeconds)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Investment period</span>
+              <span className="font-medium">{formatDuration(investmentSeconds)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Deposit cap</span>
@@ -584,7 +677,7 @@ export function CreateVault({
             shimmerColor="hsl(213, 100%, 60%)"
             shimmerSize="0.1em"
             background="hsl(213, 100%, 40%)"
-            disabled={loading || !shareMetaValid || flcExceedsBalance}
+            disabled={loading || !shareMetaValid || !lifecycleValid || flcExceedsBalance}
             onClick={handleCreate}
           >
             {loading ? (
@@ -602,5 +695,70 @@ export function CreateVault({
         </CardContent>
       </Card>
     </motion.div>
+  );
+}
+
+const DURATION_UNITS: DurationUnit[] = ["minutes", "hours", "days"];
+
+function DurationField({
+  id,
+  label,
+  tip,
+  value,
+  unit,
+  onValue,
+  onUnit,
+  error,
+  hint,
+}: {
+  id: string;
+  label: string;
+  tip: string;
+  value: string;
+  unit: DurationUnit;
+  onValue: (v: string) => void;
+  onUnit: (u: DurationUnit) => void;
+  error?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        <Tooltip>
+          <TooltipTrigger className="cursor-help">
+            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs font-normal">
+            {tip}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="number"
+          min="1"
+          step="1"
+          value={value}
+          onChange={(e) => onValue(e.target.value)}
+          className="flex-1"
+        />
+        <select
+          aria-label={`${label} unit`}
+          value={unit}
+          onChange={(e) => onUnit(e.target.value as DurationUnit)}
+          className="h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {DURATION_UNITS.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {!error && hint && <p className="text-xs text-warning-foreground">{hint}</p>}
+    </div>
   );
 }

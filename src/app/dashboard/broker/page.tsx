@@ -12,6 +12,7 @@ import { StepIndicator } from "@/components/step-indicator";
 import { motion, AnimatePresence } from "motion/react";
 import { Info } from "lucide-react";
 import type { LoanState } from "@/types/loan";
+import type { VaultSchedule } from "@/lib/vault-phase";
 
 const steps = [
   { label: "Create Vault" },
@@ -35,6 +36,12 @@ function SingleVaultNotice() {
           (repaid or defaulted) <strong className="text-foreground">and depositors have withdrawn</strong>{" "}
           their funds.
         </p>
+        <p>
+          Vaults are closed-ended: withdrawals are locked during the investment
+          period, so a funded vault can only be deleted during subscription or
+          after redemption. Use <strong className="text-foreground">Reset session</strong>{" "}
+          in the header to start over sooner.
+        </p>
       </div>
     </div>
   );
@@ -51,6 +58,7 @@ export default function BrokerPage() {
   const [loans, setLoans] = useState<LoanState[]>([]);
   const [vaultAssetTotal, setVaultAssetTotal] = useState<string | undefined>(undefined);
   const [vaultAssetsMaximum, setVaultAssetsMaximum] = useState<string | undefined>(undefined);
+  const [vaultSchedule, setVaultSchedule] = useState<VaultSchedule | undefined>(undefined);
   const [brokerDebtMaximum, setBrokerDebtMaximum] = useState<string | undefined>(undefined);
   const [brokerDebtTotal, setBrokerDebtTotal] = useState<string | undefined>(undefined);
   const [brokerCoverAvailable, setBrokerCoverAvailable] = useState<string | undefined>(undefined);
@@ -70,6 +78,15 @@ export default function BrokerPage() {
         const v = data.onLedger?.vault;
         setVaultAssetTotal(v?.AssetsTotal || "0");
         setVaultAssetsMaximum(v?.AssetsMaximum);
+        setVaultSchedule(
+          v
+            ? {
+                VaultKind: v.VaultKind,
+                SubscriptionDate: v.SubscriptionDate,
+                RedemptionDate: v.RedemptionDate,
+              }
+            : undefined
+        );
       }
       // Fetch broker node (cover, debt limits, rates) — the LoanBroker id is
       // not a LoanModel row, so /api/loan/[id] 404s; use the broker endpoint.
@@ -195,6 +212,7 @@ export default function BrokerPage() {
                 <IssueLoan
                   vaultAssetTotal={vaultAssetTotal}
                   vaultAssetsMaximum={vaultAssetsMaximum}
+                  vaultSchedule={vaultSchedule}
                   issuedToken={session.issuedToken}
                   brokerDebtMaximum={brokerDebtMaximum}
                   brokerDebtTotal={brokerDebtTotal}

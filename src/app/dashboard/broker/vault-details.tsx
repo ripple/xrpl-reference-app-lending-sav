@@ -24,6 +24,9 @@ import {
 } from "lucide-react";
 import { explorerVaultUrl, explorerMptUrl } from "@/lib/explorer";
 import { MPTokenIssuanceCreateFlags } from "xrpl";
+import { VaultPhaseBanner } from "@/components/vault-phase-banner";
+import { useRippleNow } from "@/hooks/use-ripple-now";
+import { getVaultPhase, isClosedEnded, rippleToDate } from "@/lib/vault-phase";
 
 interface VaultDetailsProps {
   vaultId: string;
@@ -51,6 +54,9 @@ interface VaultOnChain {
     };
     Sequence?: number;
     WithdrawalPolicy?: number;
+    VaultKind?: number;
+    SubscriptionDate?: number;
+    RedemptionDate?: number;
   };
 }
 
@@ -69,6 +75,7 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const now = useRippleNow();
 
   const fetchVault = useCallback(async () => {
     try {
@@ -154,6 +161,11 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
     } catch { /* invalid */ }
   }
 
+  // A funded closed-ended vault can't be emptied during investment (withdrawals
+  // are locked), so VaultDelete is unreachable until redemption.
+  const deleteLockedByPhase =
+    getVaultPhase(vault, now) === "investment" && Number(vault?.AssetsTotal || "0") > 0;
+
   const vaultAsset = vault?.Asset as Record<string, string> | undefined;
   const isTokenVault = !!(vaultAsset && (vaultAsset.issuer || vaultAsset.mpt_issuance_id));
   const tokenLabel = isTokenVault ? "TUSD" : undefined;
@@ -234,6 +246,8 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
           } />
         </div>
 
+        <VaultPhaseBanner vault={vault} />
+
         {/* Owner */}
         {vault?.Owner && (
           <div className="flex items-center justify-between text-sm">
@@ -249,7 +263,20 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
           <p className="text-sm font-medium">Configuration</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
             <TermRow label="Type" value={vault?.Flags === 0 ? "Public" : "Private"} />
+            <TermRow label="Kind" value={isClosedEnded(vault) ? "Closed-ended" : "Open-ended"} />
             <TermRow label="Asset" value={assetLabel} />
+            {isClosedEnded(vault) && (
+              <>
+                <TermRow
+                  label="Subscription closes"
+                  value={rippleToDate(vault.SubscriptionDate).toLocaleString()}
+                />
+                <TermRow
+                  label="Redemption opens"
+                  value={rippleToDate(vault.RedemptionDate).toLocaleString()}
+                />
+              </>
+            )}
             <TermRow
               label="Shares"
               value={
@@ -374,13 +401,19 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
         <Separator />
 
         {/* Actions */}
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {deleteLockedByPhase && isClosedEnded(vault) && (
+            <p className="text-xs text-muted-foreground text-right">
+              Withdrawals are locked until redemption ({rippleToDate(vault.RedemptionDate).toLocaleString()}),
+              so the vault can&apos;t be emptied and deleted before then. Use Reset session to start over.
+            </p>
+          )}
           <Button
             variant="outline"
             size="sm"
             className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
             onClick={handleDelete}
-            disabled={deleting}
+            disabled={deleting || deleteLockedByPhase}
           >
             {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Delete Vault

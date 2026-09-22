@@ -5,7 +5,12 @@
 import { Wallet, VaultCreateFlags } from "xrpl";
 import { getXrplClient } from "./client";
 import { assertTxSuccess } from "./helpers";
-import { DEFAULT_ISSUER_NAME, DEFAULT_TOKEN_ICON, withSourceTag } from "@/lib/constants";
+import {
+  DEFAULT_ISSUER_NAME,
+  DEFAULT_TOKEN_ICON,
+  VAULT_KIND_CLOSED_ENDED,
+  withSourceTag,
+} from "@/lib/constants";
 
 export interface VaultAsset {
   type: "XRP" | "IOU" | "MPT";
@@ -22,6 +27,13 @@ export interface VaultCreateOptions {
   assetsMaximum?: string;
   /** tfVaultShareNonTransferable — shares cannot be transferred to another account. */
   nonTransferableShares?: boolean;
+  /**
+   * Closed-ended lifecycle (LendingProtocolV1_1), Ripple-epoch seconds. When
+   * both are set the vault is created with `VaultKind: 1`; a LoanBroker can
+   * only be attached to such a vault. Immutable after creation.
+   */
+  subscriptionDate?: number;
+  redemptionDate?: number;
   /** XLS-89 compressed metadata for the share MPT (`t`, `n`, `d`, `i`, `ac`, `as`, `in`). */
   shareMetadata?: {
     ticker?: string;
@@ -69,6 +81,12 @@ export function buildVaultCreate(
 
   if (options.assetsMaximum) {
     tx.AssetsMaximum = options.assetsMaximum;
+  }
+
+  if (options.subscriptionDate !== undefined && options.redemptionDate !== undefined) {
+    tx.VaultKind = VAULT_KIND_CLOSED_ENDED;
+    tx.SubscriptionDate = options.subscriptionDate;
+    tx.RedemptionDate = options.redemptionDate;
   }
 
   if (options.shareMetadata) {

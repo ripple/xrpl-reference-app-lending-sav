@@ -12,6 +12,7 @@ import { AmountDisplay } from "@/components/amount-display";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Trash2, CheckCircle } from "lucide-react";
 import { explorerVaultUrl } from "@/lib/explorer";
+import { formatDuration } from "@/lib/vault-phase";
 import { DROPS_PER_XRP, nowRippleSeconds } from "@/lib/constants";
 import type { LoanState } from "@/types/loan";
 
@@ -179,8 +180,8 @@ export function ManageLoans({ loans, token, vaultId, onUpdate, onStatus }: Manag
                   <div className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
                     <Term label="Interest" value={`${(loan.interestRate / 100).toFixed(1)}%`} />
                     <Term label="Paid" value={`${paid}/${loan.paymentTotal}`} />
-                    <Term label="Interval" value={`${loan.paymentInterval / 86400}d`} />
-                    <Term label="Grace" value={`${loan.gracePeriod / 86400}d`} />
+                    <Term label="Interval" value={formatDuration(loan.paymentInterval)} />
+                    <Term label="Grace" value={formatDuration(loan.gracePeriod)} />
                     <Term label="Origination" value={`${isToken ? parseFloat(loan.originationFee).toFixed(1) : (parseInt(loan.originationFee) / DROPS_PER_XRP).toFixed(1)} ${unit}`} />
                     <Term label="Service fee" value={`${isToken ? parseFloat(loan.serviceFee).toFixed(1) : (parseInt(loan.serviceFee) / DROPS_PER_XRP).toFixed(1)} ${unit}`} />
                   </div>

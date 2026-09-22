@@ -1,4 +1,5 @@
 import { Wallet } from "xrpl";
+import { getVaultPhase, type VaultPhase, type VaultSchedule } from "@/lib/vault-phase";
 import { walletFromSeed } from "./wallet";
 import { decryptSecret } from "@/lib/crypto";
 import { getXrplClient } from "./client";
@@ -139,6 +140,25 @@ export async function fetchVaultSnapshot(vaultId: string): Promise<{
       assetsTotal: vault.AssetsTotal || "0",
       sharesMinted: vault.shares?.OutstandingAmount || "0",
     };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Current lifecycle phase of a vault, judged against the validated ledger
+ * close time (the same clock rippled uses). Null if the vault can't be read.
+ */
+export async function fetchVaultPhase(vaultId: string): Promise<{
+  phase: VaultPhase;
+  closeTime: number;
+  vault: VaultSchedule;
+} | null> {
+  try {
+    const [info, closeTime] = await Promise.all([getVaultInfo(vaultId), getValidatedCloseTime()]);
+    const vault = info.result?.vault as VaultSchedule | undefined;
+    if (!vault) return null;
+    return { phase: getVaultPhase(vault, closeTime), closeTime, vault };
   } catch {
     return null;
   }

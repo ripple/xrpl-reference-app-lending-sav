@@ -8,7 +8,13 @@ import {
   LoanManageFlags,
   getLoanInfo,
 } from "@/lib/xrpl/loan";
-import { getRoleWallet, buildAmountField, hasIssuedToken } from "@/lib/xrpl/helpers";
+import {
+  getRoleWallet,
+  buildAmountField,
+  hasIssuedToken,
+  getValidatedCloseTime,
+} from "@/lib/xrpl/helpers";
+import { getVaultPhase, isClosedEnded, rippleToDate } from "@/lib/vault-phase";
 import { getUserWallets } from "@/lib/user-wallets";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
@@ -36,15 +42,20 @@ export async function POST() {
       }
     })();
 
-    // Precondition: vault must be empty.
+    // Precondition: vault must be empty. On a closed-ended vault withdrawals
+    // are impossible during investment, so point at the real options then.
     try {
       const info = await getVaultInfo(session.vaultId);
-      const assetsTotal = Number(info.result?.vault?.AssetsTotal || "0");
+      const vault = info.result?.vault;
+      const assetsTotal = Number(vault?.AssetsTotal || "0");
       if (assetsTotal > 0) {
+        const phase = getVaultPhase(vault, await getValidatedCloseTime());
+        const how =
+          phase === "investment" && isClosedEnded(vault)
+            ? `Withdrawals are locked until the redemption phase (${rippleToDate(vault.RedemptionDate).toISOString()}); wait for it or use Reset session.`
+            : "Withdraw all funds from the Depositor tab first.";
         return NextResponse.json(
-          {
-            error: `Cannot delete vault: assets still deposited (${assetsTotal}). Withdraw all funds from the Depositor tab first.`,
-          },
+          { error: `Cannot delete vault: assets still deposited (${assetsTotal}). ${how}` },
           { status: 400 }
         );
       }

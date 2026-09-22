@@ -9,8 +9,10 @@ import {
   buildAmountField,
   hasIssuedToken,
   fetchVaultSnapshot,
+  fetchVaultPhase,
   humanToMptUnits,
 } from "@/lib/xrpl/helpers";
+import { canDeposit, rippleToDate } from "@/lib/vault-phase";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +26,22 @@ export async function POST(request: NextRequest) {
     const vaultId = typeof body.vaultId === "string" ? body.vaultId.trim() : null;
     if (!vaultId) {
       return NextResponse.json({ error: "vaultId is required" }, { status: 400 });
+    }
+
+    // Closed-ended vault: deposits only during subscription. The ledger would
+    // answer tecEXPIRED; say why instead.
+    const phaseInfo = await fetchVaultPhase(vaultId);
+    if (phaseInfo && !canDeposit(phaseInfo.phase)) {
+      const until =
+        phaseInfo.phase === "investment" && phaseInfo.vault.RedemptionDate
+          ? ` Shares can be redeemed from ${rippleToDate(phaseInfo.vault.RedemptionDate).toISOString()}.`
+          : "";
+      return NextResponse.json(
+        {
+          error: `Deposits are closed: the vault is in its ${phaseInfo.phase} phase and only accepts deposits during subscription.${until}`,
+        },
+        { status: 400 }
+      );
     }
 
     const depositorWallet = getRoleWallet(session, "depositor");

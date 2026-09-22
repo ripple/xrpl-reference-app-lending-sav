@@ -29,8 +29,16 @@ import {
   DEFAULT_ORIGINATION_FEE_DROPS,
   DEFAULT_SERVICE_FEE_DROPS,
   SECONDS_PER_YEAR,
+  LOAN_REDEMPTION_BUFFER_SECONDS,
 } from "@/lib/constants";
 import { issueLoan } from "./actions";
+import { useRippleNow } from "@/hooks/use-ripple-now";
+import {
+  formatDuration,
+  loanIssuanceBlocker,
+  maxLoanTermSeconds,
+  type VaultSchedule,
+} from "@/lib/vault-phase";
 
 import type { IssuedToken } from "@/types/session";
 
@@ -41,6 +49,8 @@ interface IssueLoanProps {
   brokerDebtTotal?: string;
   brokerCoverAvailable?: string;
   brokerCoverRateMinimum?: string;
+  /** Closed-ended schedule from `vault_info`; gates issuance and caps the term. */
+  vaultSchedule?: VaultSchedule;
   issuedToken?: IssuedToken;
   onCreated: (txHash?: string) => void;
   onError: (message: string) => void;
@@ -67,6 +77,7 @@ export function IssueLoan({
   brokerDebtTotal,
   brokerCoverAvailable,
   brokerCoverRateMinimum,
+  vaultSchedule,
   issuedToken,
   onCreated,
   onError,
@@ -74,6 +85,7 @@ export function IssueLoan({
 }: IssueLoanProps) {
   const isToken = !!issuedToken;
   const unit = isToken ? "TUSD" : "XRP";
+  const now = useRippleNow();
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -196,6 +208,12 @@ export function IssueLoan({
     }
   }
 
+  // Closed-ended vault (LendingProtocolV1_1): same rule set as the API route.
+  const loanTerm = paymentTotal * paymentInterval;
+  const maxTerm = maxLoanTermSeconds(vaultSchedule, now);
+  const lifecycleBlocker = loanIssuanceBlocker(vaultSchedule, now, loanTerm);
+  if (lifecycleBlocker) warnings.push(lifecycleBlocker);
+
   if (brokerDebtMaximum && Number(brokerDebtMaximum) > 0) {
     const maxDebt = Number(brokerDebtMaximum);
     const currentDebt = Number(brokerDebtTotal || "0");
@@ -299,7 +317,7 @@ export function IssueLoan({
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
                   <Label htmlFor="interval">Payment interval</Label>
-                  <InfoTip text="Time between payments in seconds. 2592000 = 30 days, 604800 = 7 days." />
+                  <InfoTip text={`Time between payments in seconds. 300 = 5 minutes, 86400 = 1 day, 2592000 = 30 days. The whole schedule must end at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before the vault's redemption date.`} />
                 </div>
                 <Input
                   id="interval"
@@ -311,7 +329,8 @@ export function IssueLoan({
                   }
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  {Math.round(paymentInterval / 86400)} days
+                  {formatDuration(paymentInterval)}
+                  {maxTerm !== null && ` · term ${formatDuration(loanTerm)} of max ${formatDuration(maxTerm)}`}
                 </p>
               </div>
               <div className="space-y-2">
@@ -329,7 +348,7 @@ export function IssueLoan({
                   }
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  {Math.round(gracePeriod / 86400)} days
+                  {formatDuration(gracePeriod)}
                 </p>
               </div>
             </div>

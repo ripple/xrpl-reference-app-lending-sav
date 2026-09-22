@@ -6,11 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { DROPS_PER_XRP } from "@/lib/constants";
+import { canDeposit, type VaultPhase } from "@/lib/vault-phase";
 import type { IssuedToken } from "@/types/session";
 
 interface DepositFormProps {
   vaultId: string;
   issuedToken?: IssuedToken;
+  /** Current lifecycle phase; deposits are only open during subscription. */
+  phase?: VaultPhase;
   onSuccess: (message: string, txHash?: string) => void;
   onError: (message: string) => void;
   onPending: (message: string) => void;
@@ -19,6 +22,7 @@ interface DepositFormProps {
 export function DepositForm({
   vaultId,
   issuedToken,
+  phase,
   onSuccess,
   onError,
   onPending,
@@ -27,6 +31,7 @@ export function DepositForm({
   const unit = isToken ? "TUSD" : "XRP";
   const [amount, setAmount] = useState(isToken ? "5000" : "50");
   const [loading, setLoading] = useState(false);
+  const locked = phase !== undefined && !canDeposit(phase);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,12 +76,20 @@ export function DepositForm({
           required
         />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      {locked && (
+        <p className="text-xs text-muted-foreground">
+          Deposits are only accepted during the subscription window. The vault
+          is now in its {phase} phase.
+        </p>
+      )}
+      <Button type="submit" className="w-full" disabled={loading || locked}>
         {loading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Depositing...
           </>
+        ) : locked ? (
+          "Deposits closed"
         ) : (
           `Deposit ${unit}`
         )}

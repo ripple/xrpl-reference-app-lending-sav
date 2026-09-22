@@ -146,6 +146,25 @@ components:
         nonTransferableShares:
           type: boolean
           description: "Sets tfVaultShareNonTransferable flag."
+        subscriptionSeconds:
+          type: integer
+          minimum: 120
+          maximum: 946708559
+          default: 300
+          description: >-
+            Closed-ended lifecycle: length of the subscription window
+            (deposits/withdrawals open, no loans), counted from the validated
+            ledger close time. The vault is always created with `VaultKind: 1`.
+        investmentSeconds:
+          type: integer
+          minimum: 180
+          maximum: 946708559
+          default: 1800
+          description: >-
+            Closed-ended lifecycle: length of the investment period (loans
+            open, deposits/withdrawals locked) after the subscription window.
+            `RedemptionDate = SubscriptionDate + investmentSeconds`; must be
+            < 30 years.
         shareMetadata: { $ref: "#/components/schemas/ShareMetadata" }
 
     Vault:
@@ -416,7 +435,11 @@ paths:
     post:
       tags: [Vault]
       summary: VaultDeposit
-      description: Supply liquidity. Provide `amountDrops` for XRP vaults, `tokenAmount` (decimal) for IOU/MPT.
+      description: >-
+        Supply liquidity. Provide `amountDrops` for XRP vaults, `tokenAmount`
+        (decimal) for IOU/MPT. Closed-ended vaults only accept deposits during
+        the subscription phase; outside it the route answers `400` before
+        submitting (the ledger would return `tecEXPIRED`).
       requestBody:
         required: true
         content:
@@ -444,7 +467,10 @@ paths:
     post:
       tags: [Vault]
       summary: VaultWithdraw
-      description: Redeem shares for underlying asset. Payload mirrors `/api/vault/deposit`.
+      description: >-
+        Redeem shares for underlying asset. Payload mirrors `/api/vault/deposit`.
+        Locked during a closed-ended vault's investment phase: the route answers
+        `400` with the redemption date (the ledger would return `tecTOO_SOON`).
       requestBody:
         required: true
         content:
@@ -584,6 +610,13 @@ paths:
         `originationFee`, `serviceFee`, `latePaymentFee`, `closePaymentFee`)
         are human values (drops for XRP, decimal for IOU/MPT); the server
         scales MPT values by `AssetScale` before building the tx.
+
+        Closed-ended vault gating (LendingProtocolV1_1): the route answers
+        `400` when the vault is still in its subscription phase, has entered
+        redemption, or when `paymentTotal × paymentInterval` would end less
+        than 60 s before the vault's `RedemptionDate` (the ledger would return
+        `tecTOO_SOON` / `tecEXPIRED` / `tecNO_PERMISSION`). The error message
+        includes the maximum term currently admissible.
       requestBody:
         required: true
         content:

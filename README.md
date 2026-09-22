@@ -281,8 +281,9 @@ must land at least 60 s before `RedemptionDate`, otherwise `LoanSet` returns
 transactions are allowed in every phase.
 
 The app enforces the same rules before submitting (friendly `400`s from the
-deposit / withdraw / loan routes, disabled controls and countdowns in the
-dashboards) via `src/lib/vault-phase.ts`.
+deposit / withdraw / loan routes, disabled controls in the dashboards) via
+`src/lib/vault-phase.ts`, and a lifecycle bar under the header shows the
+current phase, what it allows, and a countdown to the next transition.
 
 Demo defaults are tuned so the whole lifecycle fits in one sitting: a
 5-minute subscription window, a 30-minute investment period, and loans of

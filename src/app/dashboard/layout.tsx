@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useSession } from "@/hooks/use-session";
 import { SessionHeader } from "@/components/session-header";
+import { VaultLifecycleBar } from "@/components/vault-phase-banner";
 import { RoleTabs } from "@/components/role-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Footer } from "@/components/footer";
@@ -67,8 +68,9 @@ export default function DashboardLayout({
       <div className="relative z-10 flex-grow flex flex-col">
         {/* Sticky header */}
         <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur-sm">
-          <div className="container mx-auto px-6 py-3 max-w-5xl">
+          <div className="container mx-auto px-6 py-3 max-w-5xl space-y-3">
             <SessionHeader />
+            <VaultLifecycleBar />
           </div>
         </div>
 

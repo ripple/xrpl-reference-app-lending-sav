@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { explorerVaultUrl, explorerMptUrl } from "@/lib/explorer";
 import { MPTokenIssuanceCreateFlags } from "xrpl";
-import { VaultPhaseBanner } from "@/components/vault-phase-banner";
 import { useRippleNow } from "@/hooks/use-ripple-now";
 import { getVaultPhase, isClosedEnded, rippleToDate } from "@/lib/vault-phase";
 
@@ -245,8 +244,6 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
             </span>
           } />
         </div>
-
-        <VaultPhaseBanner vault={vault} />
 
         {/* Owner */}
         {vault?.Owner && (

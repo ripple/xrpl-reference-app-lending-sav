@@ -26,7 +26,6 @@ import {
 import { explorerVaultUrl } from "@/lib/explorer";
 import { DROPS_PER_XRP } from "@/lib/constants";
 import { MPTokenIssuanceCreateFlags } from "xrpl";
-import { VaultPhaseBanner } from "@/components/vault-phase-banner";
 import { useRippleNow } from "@/hooks/use-ripple-now";
 import { getVaultPhase, isClosedEnded } from "@/lib/vault-phase";
 
@@ -285,8 +284,6 @@ export default function DepositorPage() {
           </CardContent>
         </Card>
       </motion.div>
-
-      <VaultPhaseBanner vault={vault} />
 
       {/* Deposit / Withdraw */}
       <div className="grid gap-8 lg:grid-cols-2">

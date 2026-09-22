@@ -218,10 +218,11 @@ export default function BrokerPage() {
             <VaultDetails
               vaultId={vaultId}
               loanBrokerId={loanBrokerId}
-              onDeleted={(txHash) => {
+              onDeleted={async (txHash) => {
                 setVaultId(null);
                 setLoanBrokerId(null);
                 setLoans([]);
+                await refreshSession();
                 setStatus({ type: "success", message: "Vault deleted", txHash });
               }}
             />

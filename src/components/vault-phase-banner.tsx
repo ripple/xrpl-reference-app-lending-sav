@@ -103,7 +103,7 @@ export function VaultLifecycleBar() {
         </div>
         <span className="text-muted-foreground">{PHASES[currentIndex].allows}</span>
       </div>
-      <div className="flex items-center gap-1.5 font-mono font-medium text-primary tabular-nums">
+      <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-mono font-medium text-primary tabular-nums">
         <Clock className="h-3.5 w-3.5" />
         {countdown}
       </div>

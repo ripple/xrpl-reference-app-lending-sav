@@ -85,7 +85,8 @@ export function IssueLoan({
 }: IssueLoanProps) {
   const isToken = !!issuedToken;
   const unit = isToken ? "TUSD" : "XRP";
-  const now = useRippleNow();
+  // Per-second so the gating message stays in step with the header countdown.
+  const now = useRippleNow(1000);
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 

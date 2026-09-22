@@ -110,7 +110,7 @@ export function rippleToDate(rippleSeconds: number): Date {
   return new Date((rippleSeconds + RIPPLE_EPOCH_OFFSET) * 1000);
 }
 
-/** "3d 4h", "12m 05s", … for countdowns and error messages. */
+/** "3d 4h", "12m 05s", "5m", … for countdowns, summaries and error messages. */
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const d = Math.floor(s / SECONDS_PER_DAY);
@@ -119,7 +119,7 @@ export function formatDuration(seconds: number): string {
   const sec = s % 60;
   if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
   if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return `${m}m ${String(sec).padStart(2, "0")}s`;
+  if (m > 0) return sec > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${m}m`;
   return `${sec}s`;
 }
 

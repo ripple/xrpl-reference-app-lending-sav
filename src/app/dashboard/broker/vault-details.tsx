@@ -398,9 +398,9 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
         <Separator />
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-4">
           {deleteLockedByPhase && isClosedEnded(vault) && (
-            <p className="text-xs text-muted-foreground text-right">
+            <p className="flex-1 text-xs text-muted-foreground">
               Withdrawals are locked until redemption ({rippleToDate(vault.RedemptionDate).toLocaleString()}),
               so the vault can&apos;t be emptied and deleted before then. Use Reset session to start over.
             </p>
@@ -408,7 +408,7 @@ export function VaultDetails({ vaultId, loanBrokerId, onDeleted }: VaultDetailsP
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            className="shrink-0 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
             onClick={handleDelete}
             disabled={deleting || deleteLockedByPhase}
           >

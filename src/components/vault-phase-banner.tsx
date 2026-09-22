@@ -41,7 +41,7 @@ export function VaultPhaseBanner({ vault }: { vault: VaultSchedule | null | unde
   } else if (phase === "investment") {
     detail = `Funds are locked: no deposits or withdrawals until redemption in ${formatDuration(
       vault.RedemptionDate - now
-    )} (${fmt(vault.RedemptionDate)}). Loans must fully repay at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before that date.`;
+    )} (${fmt(vault.RedemptionDate)}). Loan schedules must end at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before that date.`;
   } else {
     detail = `The vault is winding down since ${fmt(
       vault.RedemptionDate

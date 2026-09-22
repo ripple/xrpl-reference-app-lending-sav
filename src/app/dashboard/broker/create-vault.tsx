@@ -371,7 +371,7 @@ export function CreateVault({
               <DurationField
                 id="investment-period"
                 label="Investment period"
-                tip={`Lockup during which loans are issued and repaid. Deposits and withdrawals are blocked; every loan must fully repay at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before the period ends.`}
+                tip={`Lockup during which loans are issued and repaid. Deposits and withdrawals are blocked; every loan schedule must end at least ${LOAN_REDEMPTION_BUFFER_SECONDS} s before the period ends.`}
                 value={investmentValue}
                 unit={investmentUnit}
                 onValue={setInvestmentValue}

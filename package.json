@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "copy-swagger": "node scripts/copy-swagger.mjs",
     "predev": "node scripts/copy-swagger.mjs",
@@ -32,7 +35,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

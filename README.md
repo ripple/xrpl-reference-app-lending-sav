@@ -30,7 +30,7 @@ running it unmodified against live funds is not.
 
 Set these up **before** the Quick Start:
 
-- **Node.js 20+** and npm.
+- **Node.js 24** (24.22.1 or later — the October 2026 security release) and npm. `.nvmrc` and `engines.node` pin the major; Vercel reads `engines.node` and rolls out patch releases automatically.
 - **An Auth0 tenant** (free tier is fine) — a Regular Web Application for Universal Login. See [Auth0 Setup](#auth0-setup).
 - **A MongoDB database** — a free Atlas cluster or a local Docker instance. See [MongoDB Setup](#mongodb-setup).
 
